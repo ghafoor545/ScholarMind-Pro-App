@@ -138,3 +138,7 @@ To use this README:
 2. Update the GitHub repository URL
 3. Add any additional project-specific details
 4. Save as `README.md` in your project root
+   
+
+
+IT SOLERA TEAM BETA 
