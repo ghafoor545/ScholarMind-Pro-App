@@ -9,16 +9,16 @@ import sqlite3
 from passlib.hash import pbkdf2_sha256
 import uuid
 
-# Load environment variables from a .env file
+# Load environment variables
 load_dotenv()
 
 
-# Database setup and initialization
+# Database setup
 def init_db():
     conn = sqlite3.connect('scholarmind.db')
     c = conn.cursor()
 
-    # Create users table if it doesn't exist
+    # Create users table
     c.execute('''CREATE TABLE IF NOT EXISTS users
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   username TEXT UNIQUE NOT NULL,
@@ -26,7 +26,7 @@ def init_db():
                   role TEXT NOT NULL,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
 
-    # Create research_history table if it doesn't exist
+    # Create research_history table
     c.execute('''CREATE TABLE IF NOT EXISTS research_history
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   user_id INTEGER NOT NULL,
@@ -36,10 +36,10 @@ def init_db():
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY(user_id) REFERENCES users(id))''')
 
-    # Create a default admin user if no admin exists in the database
+    # Create admin user if none exists
     c.execute("SELECT COUNT(*) FROM users WHERE role='admin'")
     if c.fetchone()[0] == 0:
-        admin_hash = pbkdf2_sha256.hash("admin123")  # Hash the default admin password
+        admin_hash = pbkdf2_sha256.hash("admin123")
         c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
                   ("admin", admin_hash, "admin"))
 
@@ -47,49 +47,43 @@ def init_db():
     conn.close()
 
 
-# Initialize the database when the script starts
 init_db()
 
 
-# Database functions for user authentication and research history management
+# Database functions
 def authenticate_user(username, password):
-    """Authenticates a user against the database."""
     conn = sqlite3.connect('scholarmind.db')
     c = conn.cursor()
     c.execute("SELECT id, username, password_hash, role FROM users WHERE username = ?", (username,))
     user = c.fetchone()
     conn.close()
 
-    # Verify the provided password against the stored hash
     if user and pbkdf2_sha256.verify(password, user[2]):
         return {
             'id': user[0],
             'username': user[1],
             'role': user[3],
-            'is_admin': user[3] == 'admin'  # Determine if the user has admin privileges
+            'is_admin': user[3] == 'admin'
         }
     return None
 
 
 def add_user(username, password, role="user"):
-    """Adds a new user to the database."""
     try:
         conn = sqlite3.connect('scholarmind.db')
         c = conn.cursor()
-        password_hash = pbkdf2_sha256.hash(password)  # Hash the password before storing
+        password_hash = pbkdf2_sha256.hash(password)
         c.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
                   (username, password_hash, role))
         conn.commit()
         return True
     except sqlite3.IntegrityError:
-        # Handle case where username already exists (UNIQUE constraint violation)
         return False
     finally:
         conn.close()
 
 
 def save_research_history(user_id, topic, content_type, content):
-    """Saves generated research content to the user's history."""
     conn = sqlite3.connect('scholarmind.db')
     c = conn.cursor()
     c.execute("INSERT INTO research_history (user_id, topic, content_type, content) VALUES (?, ?, ?, ?)",
@@ -99,15 +93,14 @@ def save_research_history(user_id, topic, content_type, content):
 
 
 def get_research_history(user_id):
-    """Retrieves a user's research history."""
     conn = sqlite3.connect('scholarmind.db')
     c = conn.cursor()
     c.execute("""
-        SELECT id, topic, content_type, created_at
-        FROM research_history
+        SELECT id, topic, content_type, created_at 
+        FROM research_history 
         WHERE user_id = ?
         ORDER BY created_at DESC
-        LIMIT 50  -- Limit to the last 50 entries
+        LIMIT 50
     """, (user_id,))
     history = c.fetchall()
     conn.close()
@@ -115,7 +108,6 @@ def get_research_history(user_id):
 
 
 def get_research_content(history_id):
-    """Retrieves the full content of a specific research history entry."""
     conn = sqlite3.connect('scholarmind.db')
     c = conn.cursor()
     c.execute("SELECT content FROM research_history WHERE id = ?", (history_id,))
@@ -124,16 +116,16 @@ def get_research_content(history_id):
     return content[0] if content else None
 
 
-# Configure the Google Gemini API with the API key from environment variables
+# Configure Gemini API
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Set Streamlit page configuration for a better user experience
+# Set page config with attractive settings
 st.set_page_config(
     page_title="ScholarMind Pro",
     page_icon="🧠",
-    layout="wide",  # Use wide layout to utilize more screen space
-    initial_sidebar_state="expanded",  # Sidebar is expanded by default
-    menu_items={  # Custom menu items for the Streamlit app
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
         'Get Help': 'https://example.com/help',
         'Report a bug': 'https://example.com/bug',
         'About': "# ScholarMind Pro - AI Research Assistant"
@@ -141,9 +133,8 @@ st.set_page_config(
 )
 
 
-# Function to load custom CSS from a file
+# Custom CSS
 def local_css(file_name):
-    """Loads custom CSS from a specified file to style the Streamlit app."""
     try:
         with open(file_name) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -151,16 +142,11 @@ def local_css(file_name):
         st.warning("styles.css file not found. Using default styling.")
 
 
-# Apply custom CSS
 local_css("styles.css")
 
 
-# Function to get trending academic research topics using the Gemini API
+# Initialize session state
 def get_trending_topics():
-    """
-    Generates 5 trending academic research topics using the Gemini API.
-    Includes retry logic and a fallback list.
-    """
     prompt = """Generate exactly 5 trending academic research topics with brief descriptions.
     Format as:
     1. Topic: Description (max 20 words)
@@ -169,20 +155,18 @@ def get_trending_topics():
     4. Topic: Description (max 20 words)
     5. Topic: Description (max 20 words)
     Return only the numbered list, nothing else."""
-    for attempt in range(3):  # Retry up to 3 times for API call
+    for attempt in range(3):  # Retry up to 3 times
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
-            # Parse the response to extract just the topic descriptions
             topics = [line.split(": ", 1)[1].strip() for line in response.text.split("\n")
                       if ": " in line and line.strip()]
             if len(topics) >= 5:
-                return topics[:5]  # Ensure exactly 5 topics are returned
-            time.sleep(1)  # Wait before retrying
+                return topics[:5]  # Ensure exactly 5 topics
+            time.sleep(1)
         except Exception as e:
             st.error(f"Attempt {attempt + 1} failed: {str(e)}")
-            time.sleep(1)  # Wait before retrying
-    # Fallback topics if API calls fail after all retries
+            time.sleep(1)
     return [
         "AI Ethics: Ethical implications of AI in decision-making",
         "Quantum Computing: Advances in quantum algorithms",
@@ -192,57 +176,47 @@ def get_trending_topics():
     ]
 
 
-# Initialize Streamlit session state variables
 def init_session_state():
-    """Initializes all necessary session state variables with default values."""
     defaults = {
-        'authenticated': False,  # User authentication status
-        'is_admin': False,       # Admin privileges status
-        'current_page': "home",  # Current page displayed
-        'final_topic': None,     # The final selected research topic
-        'topic_stage': "selecting", # Stage of topic selection (selecting, confirm, generate)
-        'trending_topics': [],   # List of trending topics fetched from API
-        'subtopics': [],         # List of generated subtopics
-        'subtopic_round': 1,     # Current round of subtopic generation
-        'show_subtopic_section': False, # Flag to show/hide subtopic generation section
-        'show_signup': False,    # Flag to show/hide signup form
-        'username': None,        # Current logged-in username
-        'user_id': None,         # Current logged-in user ID
-        'selected_trending_topic_from_radio': None, # Stores the actual value selected by the radio button
-        'current_custom_topic_value': "" # New variable to control text_input value
+        'authenticated': False,
+        'is_admin': False,
+        'current_page': "home",
+        'final_topic': None,
+        'topic_stage': "selecting",
+        'trending_topics': [],
+        'selected_trending': None,
+        'subtopics': [],
+        'subtopic_round': 1,
+        'show_subtopic_section': False,
+        'show_signup': False,
+        'username': None,
+        'user_id': None
     }
 
-    # Set default values if they are not already in session state
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 
-# Initialize session state upon script startup
 init_session_state()
 
-# Initialize Gemini model
+# Gemini model with error handling
 try:
     model = genai.GenerativeModel('gemini-1.5-flash')
 except Exception as e:
     st.error(f"Failed to initialize Gemini model: {str(e)}")
-    st.stop()  # Stop the app if the model cannot be initialized
+    st.stop()
 
 
-# Content generation functions using the Gemini model
+# Content generation functions
 def generate_research_content(topic, content_type):
-    """
-    Generates various types of research content (questions, literature, etc.)
-    based on the given topic and content type using the Gemini API.
-    Includes retry logic and saves history if authenticated.
-    """
     prompts = {
         "questions": f"""Suggest 3 research questions on: '{topic}'
         Format as markdown bullet points""",
         "literature": f"""Write a detailed literature review (400-500 words) on: "{topic}".
         Include 5 relevant papers with summaries, overall findings, and research gaps.
         Use markdown formatting with headings and bullet points.""",
-        "future": f"""List 5 future research directions for: '{topic}'
+        "future": f"""List 5 future research directions for: '{topic}' 
         Format as markdown bullet points""",
         "references": f"""Provide 5 APA-style references for papers related to: '{topic}'
         Format as numbered list""",
@@ -257,12 +231,11 @@ def generate_research_content(topic, content_type):
         5. Sub-topic description
         Return only the numbered list, nothing else."""
     }
-    for attempt in range(3):  # Retry API call up to 3 times
+    for attempt in range(3):  # Retry up to 3 times
         try:
             response = model.generate_content(prompts[content_type])
             content = response.text
             if content_type == "analysis":
-                # Parse subtopics from the generated content
                 subtopics = [line.split(". ", 1)[1].strip() for line in content.split("\n")
                              if line.strip() and line.strip()[0].isdigit() and ". " in line]
                 if len(subtopics) >= 5:
@@ -284,8 +257,7 @@ def generate_research_content(topic, content_type):
             return content
         except Exception as e:
             st.error(f"Attempt {attempt + 1} failed for {content_type}: {str(e)}")
-            time.sleep(1)  # Wait before retrying
-    # Fallback content if API calls fail
+            time.sleep(1)
     if content_type == "analysis":
         return "\n".join([
             "1. Sample sub-topic 1",
@@ -297,9 +269,8 @@ def generate_research_content(topic, content_type):
     return f"Could not generate {content_type} content. Please try again."
 
 
-# Authentication components for login and signup
+# Authentication components
 def show_auth():
-    """Displays the authentication interface (login or signup)."""
     st.title("ScholarMind Pro 🧠")
     st.markdown("---")
 
@@ -310,7 +281,6 @@ def show_auth():
 
 
 def show_login():
-    """Displays the user login form."""
     col1, col2 = st.columns(2)
 
     with col1:
@@ -322,7 +292,6 @@ def show_login():
             if st.button("Login", key="login_button", type="primary"):
                 user = authenticate_user(username, password)
                 if user:
-                    # Update session state upon successful login
                     st.session_state.update({
                         'authenticated': True,
                         'is_admin': user['is_admin'],
@@ -330,7 +299,7 @@ def show_login():
                         'user_id': user['id'],
                         'current_page': "home"
                     })
-                    st.rerun()  # Rerun the app to reflect login status
+                    st.rerun()
                 else:
                     st.error("Invalid credentials")
 
@@ -340,11 +309,10 @@ def show_login():
             st.write("Create an account to get started")
             if st.button("Sign Up", key="show_signup_button"):
                 st.session_state.show_signup = True
-                st.rerun()  # Rerun to show signup form
+                st.rerun()
 
 
 def show_signup():
-    """Displays the user signup form."""
     col1, col2 = st.columns(2)
 
     with col1:
@@ -355,14 +323,14 @@ def show_signup():
 
     with col2:
         with st.container():
-            st.header(" ")  # Spacer to align inputs
+            st.header(" ")  # Spacer
             confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_password")
             if st.button("Create Account", key="signup_button"):
                 if new_user and new_pass:
                     if new_pass == confirm_pass:
                         if add_user(new_user, new_pass):
                             st.success("Account created! Please login.")
-                            st.session_state.show_signup = False  # Switch back to login form
+                            st.session_state.show_signup = False
                             st.rerun()
                         else:
                             st.error("Username already exists")
@@ -373,12 +341,11 @@ def show_signup():
 
     if st.button("Back to Login", key="back_to_login"):
         st.session_state.show_signup = False
-        st.rerun()  # Rerun to show login form
+        st.rerun()
 
 
-# Research components for topic selection and content generation
+# Research components
 def home_page():
-    """Displays the home page with a welcome message and app features."""
     st.title(f"Welcome, {st.session_state.username}")
     st.markdown("---")
     st.header("Your AI-powered academic research assistant")
@@ -393,7 +360,6 @@ def home_page():
 
     for i, (title, desc) in enumerate(features):
         with cols[i]:
-            # Custom styled cards for features
             st.markdown(f"""
             <div style='
                 background-color: white;
@@ -411,16 +377,13 @@ def home_page():
 
 
 def research_dashboard():
-    """
-    Manages the research topic selection process, including trending topics
-    and custom topic input.
-    """
     st.title("📚 Research Dashboard")
     st.markdown("---")
 
-    # Fetch trending topics only if not already set in session state
+    # Fetch trending topics only if not already set
     if not st.session_state.trending_topics:
-        st.session_state.trending_topics = get_trending_topics()
+        with st.spinner("Loading trending topics..."):
+            st.session_state.trending_topics = get_trending_topics()
 
     with st.container():
         st.header("🔍 Topic Selection")
@@ -429,59 +392,43 @@ def research_dashboard():
         with col1:
             st.subheader("🔥 Trending Topics")
             if st.session_state.trending_topics:
-                # Streamlit radio button for trending topics.
-                # The on_change callback immediately updates a session state variable
-                # with the selected value, ensuring it's captured on click.
-                st.radio(
+                st.session_state.selected_trending = st.radio(
                     "Choose from trending topics:",
                     st.session_state.trending_topics,
-                    index=None,  # Start with no option selected
-                    key="trending_topics_radio",  # Unique key for the widget
-                    on_change=lambda: st.session_state.update(selected_trending_topic_from_radio=st.session_state.trending_topics_radio)
+                    index=None,
+                    key="trending_topics_radio"
                 )
-                # Initialize the session state variable that holds the selected radio value
-                if 'selected_trending_topic_from_radio' not in st.session_state:
-                    st.session_state.selected_trending_topic_from_radio = None
             else:
                 st.warning("Unable to load trending topics. Please try refreshing.")
 
         with col2:
             st.subheader("✍️ Custom Topic")
-            # The value of the text_input is now controlled by current_custom_topic_value
             custom_topic = st.text_input(
                 "Or enter your own topic:",
-                value=st.session_state.current_custom_topic_value, # Control its value
-                key="custom_topic_input" # Keep the key for internal state management by Streamlit
+                key="custom_topic_input"
             )
             if st.button("🔄 Refresh Topics", key="refresh_topics"):
                 with st.spinner("Refreshing trending topics..."):
                     st.session_state.trending_topics = get_trending_topics()
-                # Clear related inputs and selections when refreshing topics
-                st.session_state.current_custom_topic_value = "" # Clear the value controlling the text_input
-                st.session_state.selected_trending_topic_from_radio = None
-                st.session_state.trending_topics_radio = None # Reset the radio button's internal state
+                    st.session_state.selected_trending = None
                 st.rerun()
 
         if st.button("✅ Confirm Topic", key="confirm_topic"):
-            # Logic to confirm the topic, prioritizing custom input over trending selection
             if custom_topic.strip():
                 st.session_state.final_topic = custom_topic.strip()
                 st.session_state.topic_stage = "confirm"
-                st.session_state.selected_trending_topic_from_radio = None # Clear radio selection
-                st.session_state.trending_topics_radio = None # Reset the radio widget's internal state
-                st.session_state.current_custom_topic_value = "" # Clear the custom input value
+                st.session_state.selected_trending = None
                 st.rerun()
-            elif st.session_state.selected_trending_topic_from_radio:
-                st.session_state.final_topic = st.session_state.selected_trending_topic_from_radio
+            elif st.session_state.selected_trending:
+                st.session_state.final_topic = st.session_state.selected_trending
                 st.session_state.topic_stage = "confirm"
-                st.session_state.current_custom_topic_value = "" # Clear the custom input value
+                st.session_state.selected_trending = None
                 st.rerun()
             else:
                 st.warning("Please select a trending topic or enter a custom topic.")
 
 
 def show_topic_confirmation():
-    """Displays the confirmed topic and options for subtopic generation or proceeding."""
     st.success(f"✅ Selected Topic: {st.session_state.final_topic}")
 
     subtopic_option = st.radio(
@@ -494,7 +441,6 @@ def show_topic_confirmation():
     if subtopic_option == "Generate Subtopics":
         handle_subtopic_generation()
     else:
-        # Reset subtopic related states if proceeding with main topic
         st.session_state.topic_stage = "generate"
         st.session_state.show_subtopic_section = False
         st.session_state.subtopics = []
@@ -503,7 +449,6 @@ def show_topic_confirmation():
 
 
 def handle_subtopic_generation():
-    """Manages the generation and selection of subtopics."""
     if not st.session_state.show_subtopic_section:
         st.session_state.show_subtopic_section = True
         st.session_state.subtopic_round = 1
@@ -529,11 +474,10 @@ def handle_subtopic_generation():
         if not current_subtopics:
             st.warning("No more subtopics available. Try generating more.")
         else:
-            # Radio button for subtopic selection
             selected_subtopic = st.radio(
                 "Select a subtopic:",
                 current_subtopics,
-                key=f"subtopic_radio_{st.session_state.subtopic_round}_{uuid.uuid4()}" # Unique key
+                key=f"subtopic_radio_{st.session_state.subtopic_round}"
             )
 
             cols = st.columns(3)
@@ -560,11 +504,10 @@ def handle_subtopic_generation():
 
 
 def show_research_output():
-    """Displays the generated research content in a tabbed interface."""
     st.divider()
     st.header(f"🧠 Research Output: {st.session_state.final_topic}")
 
-    # Custom CSS for styling the tabs
+    # Add custom CSS for white tab text
     st.markdown("""
     <style>
         /* Make all tab text white */
@@ -592,7 +535,6 @@ def show_research_output():
     </style>
     """, unsafe_allow_html=True)
 
-    # Define the tabs for different content types
     tabs = st.tabs([
         "📝 Research Questions",
         "📚 Literature Review",
@@ -602,7 +544,6 @@ def show_research_output():
         "📜 Full Analysis"
     ])
 
-    # Display content within each tab
     with tabs[0]:
         show_research_questions()
     with tabs[1]:
@@ -618,7 +559,6 @@ def show_research_output():
 
 
 def show_research_questions():
-    """Generates and displays research questions."""
     st.subheader("Research Questions")
     content = generate_research_content(st.session_state.final_topic, "questions")
     st.markdown(content)
@@ -626,7 +566,6 @@ def show_research_questions():
 
 
 def show_literature_review():
-    """Generates and displays a literature review."""
     st.subheader("Literature Review")
     content = generate_research_content(st.session_state.final_topic, "literature")
     st.markdown(content)
@@ -634,7 +573,6 @@ def show_literature_review():
 
 
 def show_future_directions():
-    """Generates and displays future research directions."""
     st.subheader("Future Research Directions")
     content = generate_research_content(st.session_state.final_topic, "future")
     st.markdown(content)
@@ -642,7 +580,6 @@ def show_future_directions():
 
 
 def show_references():
-    """Generates and displays APA-style references."""
     st.subheader("APA References")
     content = generate_research_content(st.session_state.final_topic, "references")
     st.markdown(content)
@@ -650,7 +587,6 @@ def show_references():
 
 
 def show_abstract():
-    """Generates and displays an academic abstract."""
     st.subheader("Academic Abstract")
     content = generate_research_content(st.session_state.final_topic, "abstract")
     st.markdown(content)
@@ -658,7 +594,6 @@ def show_abstract():
 
 
 def show_full_analysis():
-    """Generates and displays a comprehensive analysis (subtopics)."""
     st.subheader("Comprehensive Analysis")
     content = generate_research_content(st.session_state.final_topic, "analysis")
     st.markdown(content)
@@ -666,7 +601,6 @@ def show_full_analysis():
 
 
 def add_download_button(content, filename):
-    """Adds a download button for the given content."""
     st.download_button(
         label="📥 Download",
         data=content,
@@ -675,9 +609,8 @@ def add_download_button(content, filename):
     )
 
 
-# Saved Projects section
+# Saved Projects
 def saved_projects():
-    """Displays the user's saved research projects."""
     st.title("📚 Saved Projects")
     st.markdown("---")
 
@@ -690,7 +623,6 @@ def saved_projects():
         st.info("You don't have any saved research yet")
         return
 
-    # Display each saved project in an expander
     for item in history:
         with st.expander(f"{item[1]} - {item[2]} ({item[3].split()[0]})"):
             content = get_research_content(item[0])
@@ -700,13 +632,12 @@ def saved_projects():
                 data=content,
                 file_name=f"{item[1]}_{item[2]}.md",
                 mime="text/markdown",
-                key=f"download_{item[0]}"  # Unique key for each download button
+                key=f"download_{item[0]}"
             )
 
 
-# Admin Panel section
+# Admin Panel
 def admin_panel():
-    """Displays the admin dashboard for user management and analytics."""
     st.title("👨‍💻 Admin Dashboard")
     st.markdown("---")
 
@@ -750,23 +681,20 @@ def admin_panel():
         st.write("Coming soon - system usage statistics and metrics")
 
 
-# Main application flow control
+# Main app flow
 def main():
-    """Controls the main application flow based on authentication status."""
     if not st.session_state.authenticated:
-        show_auth()  # Show login/signup if not authenticated
+        show_auth()
     else:
-        show_authenticated_interface()  # Show main app interface if authenticated
+        show_authenticated_interface()
 
 
 def show_authenticated_interface():
-    """Displays the sidebar navigation and routes to different pages."""
     st.sidebar.title(f"Welcome, {st.session_state.username}")
     if st.session_state.is_admin:
         st.sidebar.markdown("**Admin privileges** 🔑")
 
     if st.sidebar.button("Logout"):
-        # Reset session state upon logout
         st.session_state.authenticated = False
         st.session_state.trending_topics = []
         st.session_state.subtopics = []
@@ -774,27 +702,25 @@ def show_authenticated_interface():
         st.session_state.show_subtopic_section = False
         st.session_state.final_topic = None
         st.session_state.topic_stage = "selecting"
-        st.session_state.selected_trending_topic_from_radio = None # Clear this on logout
+        st.session_state.selected_trending = None
         st.rerun()
 
-    # Sidebar navigation radio buttons
     st.session_state.current_page = st.sidebar.radio(
         "Navigation",
         ["Home", "Research Assistant", "Saved Projects", "Settings"] +
-        (["Admin Panel"] if st.session_state.is_admin else []), # Admin panel only for admin users
+        (["Admin Panel"] if st.session_state.is_admin else []),
         key="navigation"
     )
 
-    route_page() # Route to the selected page
+    route_page()
 
 
 def route_page():
-    """Routes the user to the appropriate page based on current_page session state."""
     if st.session_state.current_page == "Home":
         home_page()
     elif st.session_state.current_page == "Research Assistant":
         research_dashboard()
-        # Conditional rendering of topic confirmation and research output sections
+
         if st.session_state.topic_stage == "confirm" and st.session_state.final_topic:
             show_topic_confirmation()
         elif st.session_state.topic_stage == "generate":
@@ -808,18 +734,18 @@ def route_page():
         admin_panel()
 
 
-# JavaScript for hamburger menu functionality on mobile devices
+# Add this right before if __name__ == "__main__":
 components.html("""
 <script>
 function setupHamburgerMenu() {
     const sidebar = document.querySelector('[data-testid="stSidebar"]');
     const hamburger = document.createElement('div');
 
-    // Create hamburger button HTML and CSS
+    // Create hamburger button
     hamburger.innerHTML = `
         <style>
             .hamburger-btn {
-                display: none; /* Hidden by default, shown on mobile */
+                display: none;
                 flex-direction: column;
                 justify-content: space-around;
                 width: 2rem;
@@ -828,7 +754,7 @@ function setupHamburgerMenu() {
                 border: none;
                 cursor: pointer;
                 padding: 0;
-                z-index: 10; /* Ensure it's above other content */
+                z-index: 10;
                 position: fixed;
                 top: 1rem;
                 left: 1rem;
@@ -836,26 +762,26 @@ function setupHamburgerMenu() {
             .hamburger-btn div {
                 width: 2rem;
                 height: 0.25rem;
-                background: #ecf0f1; /* Color of the hamburger lines */
+                background: #ecf0f1;
                 border-radius: 10px;
-                transition: all 0.3s linear; /* Smooth transition for animation */
+                transition: all 0.3s linear;
             }
             @media (max-width: 768px) {
                 .hamburger-btn {
-                    display: flex; /* Show hamburger on screens <= 768px */
+                    display: flex;
                 }
                 [data-testid="stSidebar"] {
-                    transform: translateX(-100%); /* Hide sidebar off-screen */
+                    transform: translateX(-100%);
                     transition: transform 0.3s ease-in-out;
-                    position: fixed !important; /* Fix position for mobile */
-                    height: 100vh !important; /* Full height */
-                    z-index: 5; /* Below hamburger but above main content */
+                    position: fixed !important;
+                    height: 100vh !important;
+                    z-index: 5;
                 }
                 [data-testid="stSidebar"].open {
-                    transform: translateX(0); /* Slide sidebar into view */
+                    transform: translateX(0);
                 }
                 [data-testid="collapsedControl"] {
-                    display: none !important; /* Hide default Streamlit collapse button */
+                    display: none !important;
                 }
             }
         </style>
@@ -867,22 +793,22 @@ function setupHamburgerMenu() {
     `;
     document.body.appendChild(hamburger);
 
-    // Toggle sidebar visibility when hamburger button is clicked
+    // Toggle sidebar
     document.querySelector('.hamburger-btn').addEventListener('click', function() {
         sidebar.classList.toggle('open');
     });
 
-    // Close sidebar when clicking outside of it on mobile
+    // Close when clicking outside on mobile
     document.addEventListener('click', function(event) {
-        if (window.innerWidth <= 768 &&
-            !sidebar.contains(event.target) &&
+        if (window.innerWidth <= 768 && 
+            !sidebar.contains(event.target) && 
             !event.target.closest('.hamburger-btn') &&
             sidebar.classList.contains('open')) {
             sidebar.classList.remove('open');
         }
     });
 
-    // Ensure sidebar is visible on desktop (initial load and resize)
+    // Ensure sidebar is visible on desktop
     function handleResize() {
         if (window.innerWidth > 768) {
             sidebar.classList.add('open');
@@ -890,19 +816,16 @@ function setupHamburgerMenu() {
     }
 
     window.addEventListener('resize', handleResize);
-    handleResize(); // Call once on load
+    handleResize();
 }
 
-// Attach the setup function to the window load event
 if (document.readyState === 'complete') {
     setupHamburgerMenu();
 } else {
     window.addEventListener('load', setupHamburgerMenu);
 }
 </script>
-""", height=0) # height=0 makes this component invisible but runs the JS
+""", height=0)
 
-
-# Entry point of the Streamlit application
 if __name__ == "__main__":
     main()
