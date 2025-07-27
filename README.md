@@ -43,7 +43,7 @@ text
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/ScholarMind.git
+   git clone https://github.com/ghafoor545/ScholarMind-Pro-App.git
    cd ScholarMind
 Set up virtual environment (recommended)
 
@@ -133,8 +133,8 @@ Key improvements made:
    - Clear status indicators for upcoming features
    - Inspirational quote at the bottom
 
-To use this README:
-1. Replace placeholder image URLs with actual screenshots
-2. Update the GitHub repository URL
-3. Add any additional project-specific details
-4. Save as `README.md` in your project root
+
+   
+
+
+IT SOLERA TEAM BETA 
