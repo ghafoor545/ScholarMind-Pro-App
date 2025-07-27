@@ -43,7 +43,7 @@ text
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/your-username/ScholarMind.git
+   git clone https://github.com/ghafoor545/ScholarMind-Pro-App.git
    cd ScholarMind
 Set up virtual environment (recommended)
 
